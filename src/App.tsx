@@ -92,10 +92,21 @@ function AgentPortal({ clients }: any) {
     }
   }, [selectedHistoryClientId]);
 
+  const fetchSavedReports = async () => {
+    const response = await fetch('/api/reports');
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.error || 'Failed to load saved reports.');
+    }
+
+    const data = await response.json();
+    setSavedReports(Array.isArray(data) ? data : []);
+  };
+
   useEffect(() => {
-    fetch('/api/reports')
-      .then(res => res.json())
-      .then(setSavedReports);
+    fetchSavedReports().catch((error) => {
+      console.error('Load Reports Error:', error);
+    });
   }, []);
 
   const handleGenerateAIReport = async () => {
@@ -303,7 +314,7 @@ function AgentPortal({ clients }: any) {
     setIsSaving(true);
     try {
       const diagnosis = `首要: ${primaryOrgan?.name} (${primaryOrgan?.score}), 其他: ${otherOrgans.map(o => o.name).join(', ')}`;
-      await fetch('/api/reports/save', {
+      const saveRes = await fetch('/api/reports/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -313,21 +324,78 @@ function AgentPortal({ clients }: any) {
           content: aiReport
         })
       });
-      
-      const res = await fetch('/api/reports');
-      const data = await res.json();
-      setSavedReports(data);
+
+      if (!saveRes.ok) {
+        const payload = await saveRes.json().catch(() => ({}));
+        throw new Error(payload.error || 'Save report request failed.');
+      }
+
+      await fetchSavedReports();
       alert('報告已成功保存到數據庫');
     } catch (error) {
       console.error('Save Report Error:', error);
-      alert('保存報告時發生錯誤');
+      const message = error instanceof Error ? error.message : '未知錯誤';
+      alert(`保存報告時發生錯誤：${message}`);
     } finally {
       setIsSaving(false);
     }
   };
 
   const handlePrint = () => {
-    window.print();
+    const reportElement = document.querySelector('.report-container');
+    if (!reportElement) {
+      alert('找不到可列印的報告內容。');
+      return;
+    }
+
+    const printWindow = window.open('', '_blank', 'width=1024,height=768');
+    if (!printWindow) {
+      alert('無法開啟列印視窗，請檢查瀏覽器彈窗設定。');
+      return;
+    }
+
+    const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+      .map((node) => node.outerHTML)
+      .join('\n');
+
+    const printableHtml = `
+      <!doctype html>
+      <html lang="zh-Hant">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>中西醫整合營養調理指南</title>
+        ${styles}
+        <style>
+          body { margin: 0; background: #fff; }
+          .report-container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 16px 24px;
+            box-shadow: none !important;
+            border: none !important;
+          }
+        </style>
+      </head>
+      <body>
+        <section class="report-container">${reportElement.innerHTML}</section>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(printableHtml);
+    printWindow.document.close();
+
+    const triggerPrint = () => {
+      printWindow.focus();
+      printWindow.print();
+      printWindow.close();
+    };
+
+    printWindow.onload = () => {
+      setTimeout(triggerPrint, 300);
+    };
   };
 
   const handleEmail = () => {

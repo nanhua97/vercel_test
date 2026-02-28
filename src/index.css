@@ -17,21 +17,36 @@
 }
 
 @media print {
-  header, .lg\:col-span-1, .lg\:col-span-2, .lg\:col-span-3, button, select {
-    display: none !important;
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
   }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .report-container,
+  .report-container * {
+    visibility: visible !important;
+  }
+
   .report-container {
-    display: block !important;
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    margin: 0;
-    padding: 0;
+    position: static !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
     box-shadow: none !important;
     border: none !important;
+    break-inside: auto;
+    page-break-inside: auto;
   }
+
   body {
     background: white !important;
+    margin: 0 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 }
