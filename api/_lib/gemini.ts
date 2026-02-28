@@ -1,5 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
-import { setupDevProxyForGemini } from './devProxy';
+import { setupDevProxyForGemini } from './devProxy.js';
 
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 setupDevProxyForGemini();

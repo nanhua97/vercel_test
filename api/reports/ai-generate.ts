@@ -1,5 +1,5 @@
-import { generateReportFromPrompt } from '../_lib/gemini';
-import { methodNotAllowed, readJsonBody, sendError } from '../_lib/http';
+import { generateReportFromPrompt } from '../_lib/gemini.js';
+import { methodNotAllowed, readJsonBody, sendError } from '../_lib/http.js';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {

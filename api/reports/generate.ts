@@ -1,4 +1,4 @@
-import { methodNotAllowed, readJsonBody, sendError } from '../_lib/http';
+import { methodNotAllowed, readJsonBody, sendError } from '../_lib/http.js';
 
 function escapeHtml(value: string): string {
   return value

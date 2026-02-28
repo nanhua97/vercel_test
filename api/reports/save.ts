@@ -1,5 +1,5 @@
-import { methodNotAllowed, readJsonBody, sendError } from '../_lib/http';
-import { saveReport } from '../_lib/store';
+import { methodNotAllowed, readJsonBody, sendError } from '../_lib/http.js';
+import { saveReport } from '../_lib/store.js';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
