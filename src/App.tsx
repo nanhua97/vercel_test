@@ -402,18 +402,17 @@ function AgentPortal({ clients }: any) {
       const contentWidthMm = pageWidthMm - marginMm * 2;
       const contentHeightMm = pageHeightMm - marginMm * 2;
 
-      const pxPerMm = canvas.width / contentWidthMm;
+      const horizontalPadPx = Math.max(8, Math.floor((bounds.maxX - bounds.minX + 1) * 0.03));
+      const srcX = Math.max(0, bounds.minX - horizontalPadPx);
+      const srcMaxX = Math.min(canvas.width - 1, bounds.maxX + horizontalPadPx);
+      const srcWidthPx = srcMaxX - srcX + 1;
+
+      const pxPerMm = srcWidthPx / contentWidthMm;
       const pageSliceHeightPx = Math.floor(contentHeightMm * pxPerMm);
       const searchRangePx = Math.floor(pageSliceHeightPx * 0.15);
       const minSliceHeightPx = Math.floor(pageSliceHeightPx * 0.72);
       const maxSliceHeightPx = Math.floor(pageSliceHeightPx * 1.2);
-
-      const contentCenterX = (bounds.minX + bounds.maxX) / 2;
-      const canvasCenterX = canvas.width / 2;
-      const centerOffsetPx = contentCenterX - canvasCenterX;
-      const centerOffsetMm = centerOffsetPx / pxPerMm;
-      const centeredX = (pageWidthMm - contentWidthMm) / 2 - centerOffsetMm;
-      const renderX = Math.max(0, Math.min(pageWidthMm - contentWidthMm, centeredX));
+      const renderX = (pageWidthMm - contentWidthMm) / 2;
 
       let offsetY = bounds.minY;
       const exportEndY = bounds.maxY + 1;
@@ -437,11 +436,11 @@ function AgentPortal({ clients }: any) {
           let bestY = idealEnd;
           let bestScore = Number.POSITIVE_INFINITY;
           let bestWhitespaceDistance = Number.POSITIVE_INFINITY;
-          const sampledColumns = Math.max(1, Math.floor((bounds.maxX - bounds.minX) / 3));
+          const sampledColumns = Math.max(1, Math.floor(srcWidthPx / 3));
           const whitespaceThreshold = Math.max(2, Math.floor(sampledColumns * 0.01));
 
           for (let y = lowerSearchY; y <= upperSearchY; y += 1) {
-            const score = rowInkScore(y, bounds.minX, bounds.maxX);
+            const score = rowInkScore(y, srcX, srcMaxX);
             const distance = Math.abs(y - idealEnd);
 
             if (score <= whitespaceThreshold) {
@@ -466,7 +465,7 @@ function AgentPortal({ clients }: any) {
         }
 
         const pageCanvas = document.createElement('canvas');
-        pageCanvas.width = canvas.width;
+        pageCanvas.width = srcWidthPx;
         pageCanvas.height = sliceHeightPx;
 
         const ctx = pageCanvas.getContext('2d');
@@ -476,13 +475,13 @@ function AgentPortal({ clients }: any) {
 
         ctx.drawImage(
           canvas,
-          0,
+          srcX,
           offsetY,
-          canvas.width,
+          srcWidthPx,
           sliceHeightPx,
           0,
           0,
-          canvas.width,
+          srcWidthPx,
           sliceHeightPx
         );
 
