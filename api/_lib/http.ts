@@ -1,0 +1,48 @@
+export function readJsonBody<T = any>(req: any): T {
+  if (!req?.body) {
+    return {} as T;
+  }
+
+  if (typeof req.body === 'string') {
+    try {
+      return JSON.parse(req.body) as T;
+    } catch {
+      return {} as T;
+    }
+  }
+
+  return req.body as T;
+}
+
+export function methodNotAllowed(res: any, allowed: string[]): void {
+  res.setHeader('Allow', allowed.join(', '));
+  res.status(405).json({ error: `Method not allowed. Use: ${allowed.join(', ')}` });
+}
+
+export function sendError(res: any, error: unknown): void {
+  let message = error instanceof Error ? error.message : 'Unexpected server error';
+  const causeCode = (error as any)?.cause?.code;
+
+  if (causeCode === 'UND_ERR_CONNECT_TIMEOUT') {
+    message = 'Unable to reach Gemini API (network timeout). Please check outbound network access and try again.';
+  } else if (causeCode === 'ENOTFOUND') {
+    message = 'Unable to resolve Gemini API host (DNS failure). Please check your network/DNS settings.';
+  } else if (causeCode === 'ECONNREFUSED') {
+    message = 'Connection to Gemini API was refused. Please check network proxy or firewall settings.';
+  }
+
+  const trimmed = message.trim();
+  if (trimmed.startsWith('{') && trimmed.includes('"error"')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      const nested = parsed?.error?.message;
+      if (typeof nested === 'string' && nested.trim()) {
+        message = nested;
+      }
+    } catch {
+      // Keep original message if parsing fails.
+    }
+  }
+
+  res.status(500).json({ error: message });
+}
