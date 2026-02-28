@@ -2,21 +2,16 @@ import React, { useState, useEffect } from 'react';
 import {
   ClipboardList, 
   User, 
-  FileText, 
   Camera, 
   Droplets, 
   Coffee, 
   Moon, 
   Sun, 
   CheckCircle, 
-  ChevronRight, 
-  History, 
   Download,
   Activity,
   Plus,
   Sparkles,
-  Printer,
-  Save,
   Mail
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -60,9 +55,8 @@ function AgentPortal({ clients }: any) {
   const [otherOrgans, setOtherOrgans] = useState<{ name: string, score: number }[]>([]);
   const [selectedConstitutions, setSelectedConstitutions] = useState<{ name: string, score: number }[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
-  const [savedReports, setSavedReports] = useState<any[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [selectedHistoryClientId, setSelectedHistoryClientId] = useState<number | null>(null);
   const [aiReport, setAiReport] = useState<any | null>(null);
   const [uploadedLogo, setUploadedLogo] = useState<string | null>(null);
@@ -91,23 +85,6 @@ function AgentPortal({ clients }: any) {
         .then(setLogs);
     }
   }, [selectedHistoryClientId]);
-
-  const fetchSavedReports = async () => {
-    const response = await fetch('/api/reports');
-    if (!response.ok) {
-      const payload = await response.json().catch(() => ({}));
-      throw new Error(payload.error || 'Failed to load saved reports.');
-    }
-
-    const data = await response.json();
-    setSavedReports(Array.isArray(data) ? data : []);
-  };
-
-  useEffect(() => {
-    fetchSavedReports().catch((error) => {
-      console.error('Load Reports Error:', error);
-    });
-  }, []);
 
   const handleGenerateAIReport = async () => {
     if (!primaryOrgan) {
@@ -309,93 +286,71 @@ function AgentPortal({ clients }: any) {
     }
   };
 
-  const handleSaveReport = async () => {
+  const handleDownloadPdf = async () => {
     if (!aiReport) return;
-    setIsSaving(true);
-    try {
-      const diagnosis = `首要: ${primaryOrgan?.name} (${primaryOrgan?.score}), 其他: ${otherOrgans.map(o => o.name).join(', ')}`;
-      const saveRes = await fetch('/api/reports/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          client_name: 'Anonymous',
-          client_phone: 'N/A',
-          diagnosis,
-          content: aiReport
-        })
-      });
 
-      if (!saveRes.ok) {
-        const payload = await saveRes.json().catch(() => ({}));
-        throw new Error(payload.error || 'Save report request failed.');
-      }
-
-      await fetchSavedReports();
-      alert('報告已成功保存到數據庫');
-    } catch (error) {
-      console.error('Save Report Error:', error);
-      const message = error instanceof Error ? error.message : '未知錯誤';
-      alert(`保存報告時發生錯誤：${message}`);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handlePrint = () => {
     const reportElement = document.querySelector('.report-container');
     if (!reportElement) {
-      alert('找不到可列印的報告內容。');
+      alert('找不到可下載的報告內容。');
       return;
     }
 
-    const printWindow = window.open('', '_blank', 'width=1024,height=768');
-    if (!printWindow) {
-      alert('無法開啟列印視窗，請檢查瀏覽器彈窗設定。');
-      return;
+    setIsDownloadingPdf(true);
+    try {
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import('html2canvas'),
+        import('jspdf'),
+      ]);
+
+      const canvas = await html2canvas(reportElement as HTMLElement, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        scrollY: -window.scrollY,
+      });
+
+      const imageData = canvas.toDataURL('image/jpeg', 0.98);
+      const pdf = new jsPDF({
+        orientation: 'p',
+        unit: 'mm',
+        format: 'a4',
+        compress: true,
+      });
+
+      const pageWidth = 210;
+      const pageHeight = 297;
+      const margin = 8;
+      const printableWidth = pageWidth - margin * 2;
+      const printableHeight = pageHeight - margin * 2;
+      const imageHeight = (canvas.height * printableWidth) / canvas.width;
+
+      let remainingHeight = imageHeight;
+      let y = margin;
+
+      pdf.addImage(imageData, 'JPEG', margin, y, printableWidth, imageHeight, undefined, 'FAST');
+      remainingHeight -= printableHeight;
+
+      while (remainingHeight > 0) {
+        pdf.addPage();
+        y = margin - (imageHeight - remainingHeight);
+        pdf.addImage(imageData, 'JPEG', margin, y, printableWidth, imageHeight, undefined, 'FAST');
+        remainingHeight -= printableHeight;
+      }
+
+      const now = new Date();
+      const pad = (num: number) => String(num).padStart(2, '0');
+      const filename =
+        `tcm-report-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}` +
+        `-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.pdf`;
+
+      pdf.save(filename);
+    } catch (error) {
+      console.error('Download PDF Error:', error);
+      const message = error instanceof Error ? error.message : '未知錯誤';
+      alert(`下載 PDF 失敗：${message}`);
+    } finally {
+      setIsDownloadingPdf(false);
     }
-
-    const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
-      .map((node) => node.outerHTML)
-      .join('\n');
-
-    const printableHtml = `
-      <!doctype html>
-      <html lang="zh-Hant">
-      <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>中西醫整合營養調理指南</title>
-        ${styles}
-        <style>
-          body { margin: 0; background: #fff; }
-          .report-container {
-            max-width: 960px;
-            margin: 0 auto;
-            padding: 16px 24px;
-            box-shadow: none !important;
-            border: none !important;
-          }
-        </style>
-      </head>
-      <body>
-        <section class="report-container">${reportElement.innerHTML}</section>
-      </body>
-      </html>
-    `;
-
-    printWindow.document.open();
-    printWindow.document.write(printableHtml);
-    printWindow.document.close();
-
-    const triggerPrint = () => {
-      printWindow.focus();
-      printWindow.print();
-      printWindow.close();
-    };
-
-    printWindow.onload = () => {
-      setTimeout(triggerPrint, 300);
-    };
   };
 
   const handleEmail = () => {
@@ -596,23 +551,17 @@ function AgentPortal({ clients }: any) {
                 {aiReport && (
                   <>
                     <button
-                      onClick={handleSaveReport}
-                      disabled={isSaving}
-                      className="bg-emerald-600 text-white px-6 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200"
-                    >
-                      <Save size={20} /> {isSaving ? '保存中...' : '保存到數據庫'}
-                    </button>
-                    <button
                       onClick={handleEmail}
                       className="bg-blue-600 text-white px-6 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
                     >
                       <Mail size={20} /> Email 發送
                     </button>
                     <button
-                      onClick={handlePrint}
+                      onClick={handleDownloadPdf}
+                      disabled={isDownloadingPdf}
                       className="bg-slate-800 text-white px-6 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-slate-900 transition-all shadow-lg shadow-slate-200"
                     >
-                      <Printer size={20} /> 列印
+                      <Download size={20} /> {isDownloadingPdf ? 'PDF 生成中...' : '保存為 PDF'}
                     </button>
                   </>
                 )}
@@ -847,36 +796,6 @@ function AgentPortal({ clients }: any) {
             )}
           </AnimatePresence>
 
-          {/* Saved Reports History */}
-          <section className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
-            <h2 className="text-xl font-semibold flex items-center gap-2 mb-6">
-              <FileText className="text-indigo-500" /> Saved Reports History (Database)
-            </h2>
-            <div className="space-y-4">
-              {savedReports.length === 0 ? (
-                <div className="text-center py-10 text-slate-400">No reports saved in database yet.</div>
-              ) : (
-                savedReports.map(report => (
-                  <div key={report.id} className="border border-slate-100 rounded-2xl p-5 hover:bg-slate-50 transition-colors flex justify-between items-center">
-                    <div>
-                      <div className="font-bold text-slate-800">Report #{report.id}</div>
-                      <div className="text-xs text-slate-500">{report.created_at}</div>
-                      <div className="text-sm text-indigo-600 mt-1">{report.diagnosis}</div>
-                    </div>
-                    <button 
-                      onClick={() => {
-                        setAiReport(JSON.parse(report.content));
-                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                      }}
-                      className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                    >
-                      <ChevronRight size={20} />
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
         </div>
 
         {/* Client Sidebar */}
