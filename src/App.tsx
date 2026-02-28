@@ -297,16 +297,16 @@ function AgentPortal({ clients }: any) {
 
     setIsDownloadingPdf(true);
     try {
-      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-        import('html2canvas'),
+      const [{ toCanvas }, { jsPDF }] = await Promise.all([
+        import('html-to-image'),
         import('jspdf'),
       ]);
 
-      const canvas = await html2canvas(reportElement as HTMLElement, {
-        scale: 2,
-        useCORS: true,
+      const isMobileViewport = window.innerWidth < 768;
+      const canvas = await toCanvas(reportElement as HTMLElement, {
+        pixelRatio: isMobileViewport ? 1 : 2,
+        cacheBust: true,
         backgroundColor: '#ffffff',
-        scrollY: -window.scrollY,
       });
 
       const imageData = canvas.toDataURL('image/jpeg', 0.98);
