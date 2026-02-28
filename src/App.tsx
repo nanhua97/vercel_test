@@ -324,6 +324,71 @@ function AgentPortal({ clients }: any) {
         backgroundColor: '#ffffff',
       });
 
+      const sourceCtx = canvas.getContext('2d');
+      if (!sourceCtx) {
+        throw new Error('PDF 畫布上下文初始化失敗。');
+      }
+
+      const imageData = sourceCtx.getImageData(0, 0, canvas.width, canvas.height);
+      const pixels = imageData.data;
+
+      const findContentBounds = () => {
+        let minX = canvas.width;
+        let minY = canvas.height;
+        let maxX = -1;
+        let maxY = -1;
+        const step = 2;
+
+        for (let y = 0; y < canvas.height; y += step) {
+          for (let x = 0; x < canvas.width; x += step) {
+            const idx = (y * canvas.width + x) * 4;
+            const r = pixels[idx];
+            const g = pixels[idx + 1];
+            const b = pixels[idx + 2];
+            const a = pixels[idx + 3];
+            const isBlank = a < 16 || (r > 248 && g > 248 && b > 248);
+            if (isBlank) continue;
+
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+
+        if (maxX < 0 || maxY < 0) {
+          return null;
+        }
+
+        const pad = 4;
+        return {
+          minX: Math.max(0, minX - pad),
+          maxX: Math.min(canvas.width - 1, maxX + pad),
+          minY: Math.max(0, minY - pad),
+          maxY: Math.min(canvas.height - 1, maxY + pad),
+        };
+      };
+
+      const bounds = findContentBounds();
+      if (!bounds) {
+        throw new Error('未檢測到可導出的報告內容。');
+      }
+
+      const rowInkScore = (rowY: number, minX: number, maxX: number) => {
+        const stepX = 3;
+        let score = 0;
+        for (let x = minX; x <= maxX; x += stepX) {
+          const idx = (rowY * canvas.width + x) * 4;
+          const r = pixels[idx];
+          const g = pixels[idx + 1];
+          const b = pixels[idx + 2];
+          const a = pixels[idx + 3];
+          const isInk = a > 16 && (r < 248 || g < 248 || b < 248);
+          if (isInk) score += 1;
+        }
+        return score;
+      };
+
       const pdf = new jsPDF({
         orientation: 'p',
         unit: 'mm',
@@ -339,12 +404,67 @@ function AgentPortal({ clients }: any) {
 
       const pxPerMm = canvas.width / contentWidthMm;
       const pageSliceHeightPx = Math.floor(contentHeightMm * pxPerMm);
+      const searchRangePx = Math.floor(pageSliceHeightPx * 0.15);
+      const minSliceHeightPx = Math.floor(pageSliceHeightPx * 0.72);
+      const maxSliceHeightPx = Math.floor(pageSliceHeightPx * 1.2);
 
-      let offsetY = 0;
+      const contentCenterX = (bounds.minX + bounds.maxX) / 2;
+      const canvasCenterX = canvas.width / 2;
+      const centerOffsetPx = contentCenterX - canvasCenterX;
+      const centerOffsetMm = centerOffsetPx / pxPerMm;
+      const centeredX = (pageWidthMm - contentWidthMm) / 2 - centerOffsetMm;
+      const renderX = Math.max(0, Math.min(pageWidthMm - contentWidthMm, centeredX));
+
+      let offsetY = bounds.minY;
+      const exportEndY = bounds.maxY + 1;
       let pageIndex = 0;
 
-      while (offsetY < canvas.height) {
-        const sliceHeightPx = Math.min(pageSliceHeightPx, canvas.height - offsetY);
+      while (offsetY < exportEndY) {
+        let sliceHeightPx = Math.min(pageSliceHeightPx, exportEndY - offsetY);
+
+        if (offsetY + sliceHeightPx < exportEndY) {
+          const idealEnd = offsetY + pageSliceHeightPx;
+          const lowerSearchY = Math.max(
+            offsetY + minSliceHeightPx,
+            idealEnd - searchRangePx
+          );
+          const upperSearchY = Math.min(
+            exportEndY - 1,
+            offsetY + maxSliceHeightPx,
+            idealEnd + searchRangePx
+          );
+
+          let bestY = idealEnd;
+          let bestScore = Number.POSITIVE_INFINITY;
+          let bestWhitespaceDistance = Number.POSITIVE_INFINITY;
+          const sampledColumns = Math.max(1, Math.floor((bounds.maxX - bounds.minX) / 3));
+          const whitespaceThreshold = Math.max(2, Math.floor(sampledColumns * 0.01));
+
+          for (let y = lowerSearchY; y <= upperSearchY; y += 1) {
+            const score = rowInkScore(y, bounds.minX, bounds.maxX);
+            const distance = Math.abs(y - idealEnd);
+
+            if (score <= whitespaceThreshold) {
+              if (distance < bestWhitespaceDistance) {
+                bestWhitespaceDistance = distance;
+                bestY = y;
+                bestScore = score;
+              }
+              continue;
+            }
+
+            if (bestWhitespaceDistance === Number.POSITIVE_INFINITY && score < bestScore) {
+              bestScore = score;
+              bestY = y;
+            }
+          }
+
+          const adjustedSliceHeight = bestY - offsetY;
+          if (adjustedSliceHeight > 1) {
+            sliceHeightPx = adjustedSliceHeight;
+          }
+        }
+
         const pageCanvas = document.createElement('canvas');
         pageCanvas.width = canvas.width;
         pageCanvas.height = sliceHeightPx;
@@ -375,7 +495,7 @@ function AgentPortal({ clients }: any) {
         pdf.addImage(
           sliceImageData,
           'JPEG',
-          marginMm,
+          renderX,
           marginMm,
           contentWidthMm,
           renderHeightMm,
