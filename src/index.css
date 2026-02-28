@@ -16,6 +16,31 @@
   @apply text-sm leading-relaxed;
 }
 
+.pdf-export-host {
+  position: fixed;
+  top: 0;
+  left: -100000px;
+  width: 1120px;
+  opacity: 0;
+  pointer-events: none;
+  z-index: -1;
+  background: #fff;
+}
+
+.pdf-export-host .pdf-export-clone {
+  width: 960px !important;
+  max-width: 960px !important;
+  margin: 0 auto !important;
+  box-shadow: none !important;
+  border: none !important;
+  background: #fff !important;
+}
+
+.pdf-export-host .pdf-two-col-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
 @media print {
   @page {
     size: A4 portrait;

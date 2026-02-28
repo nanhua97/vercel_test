@@ -296,20 +296,34 @@ function AgentPortal({ clients }: any) {
     }
 
     setIsDownloadingPdf(true);
+    let exportHost: HTMLDivElement | null = null;
     try {
       const [{ toCanvas }, { jsPDF }] = await Promise.all([
         import('html-to-image'),
         import('jspdf'),
       ]);
 
-      const isMobileViewport = window.innerWidth < 768;
-      const canvas = await toCanvas(reportElement as HTMLElement, {
-        pixelRatio: isMobileViewport ? 1 : 2,
+      exportHost = document.createElement('div');
+      exportHost.className = 'pdf-export-host';
+
+      const clonedReport = (reportElement as HTMLElement).cloneNode(true) as HTMLElement;
+      clonedReport.classList.add('pdf-export-clone');
+      exportHost.appendChild(clonedReport);
+      document.body.appendChild(exportHost);
+
+      if ('fonts' in document) {
+        await (document as Document & { fonts: FontFaceSet }).fonts.ready;
+      }
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
+
+      const canvas = await toCanvas(clonedReport, {
+        pixelRatio: 2,
         cacheBust: true,
         backgroundColor: '#ffffff',
       });
 
-      const imageData = canvas.toDataURL('image/jpeg', 0.98);
       const pdf = new jsPDF({
         orientation: 'p',
         unit: 'mm',
@@ -317,24 +331,60 @@ function AgentPortal({ clients }: any) {
         compress: true,
       });
 
-      const pageWidth = 210;
-      const pageHeight = 297;
-      const margin = 8;
-      const printableWidth = pageWidth - margin * 2;
-      const printableHeight = pageHeight - margin * 2;
-      const imageHeight = (canvas.height * printableWidth) / canvas.width;
+      const pageWidthMm = 210;
+      const pageHeightMm = 297;
+      const marginMm = 8;
+      const contentWidthMm = pageWidthMm - marginMm * 2;
+      const contentHeightMm = pageHeightMm - marginMm * 2;
 
-      let remainingHeight = imageHeight;
-      let y = margin;
+      const pxPerMm = canvas.width / contentWidthMm;
+      const pageSliceHeightPx = Math.floor(contentHeightMm * pxPerMm);
 
-      pdf.addImage(imageData, 'JPEG', margin, y, printableWidth, imageHeight, undefined, 'FAST');
-      remainingHeight -= printableHeight;
+      let offsetY = 0;
+      let pageIndex = 0;
 
-      while (remainingHeight > 0) {
-        pdf.addPage();
-        y = margin - (imageHeight - remainingHeight);
-        pdf.addImage(imageData, 'JPEG', margin, y, printableWidth, imageHeight, undefined, 'FAST');
-        remainingHeight -= printableHeight;
+      while (offsetY < canvas.height) {
+        const sliceHeightPx = Math.min(pageSliceHeightPx, canvas.height - offsetY);
+        const pageCanvas = document.createElement('canvas');
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = sliceHeightPx;
+
+        const ctx = pageCanvas.getContext('2d');
+        if (!ctx) {
+          throw new Error('PDF canvas context 初始化失敗。');
+        }
+
+        ctx.drawImage(
+          canvas,
+          0,
+          offsetY,
+          canvas.width,
+          sliceHeightPx,
+          0,
+          0,
+          canvas.width,
+          sliceHeightPx
+        );
+
+        if (pageIndex > 0) {
+          pdf.addPage();
+        }
+
+        const sliceImageData = pageCanvas.toDataURL('image/jpeg', 0.98);
+        const renderHeightMm = sliceHeightPx / pxPerMm;
+        pdf.addImage(
+          sliceImageData,
+          'JPEG',
+          marginMm,
+          marginMm,
+          contentWidthMm,
+          renderHeightMm,
+          undefined,
+          'FAST'
+        );
+
+        offsetY += sliceHeightPx;
+        pageIndex += 1;
       }
 
       const now = new Date();
@@ -349,6 +399,7 @@ function AgentPortal({ clients }: any) {
       const message = error instanceof Error ? error.message : '未知錯誤';
       alert(`下載 PDF 失敗：${message}`);
     } finally {
+      exportHost?.remove();
       setIsDownloadingPdf(false);
     }
   };
@@ -684,7 +735,7 @@ function AgentPortal({ clients }: any) {
                   </div>
 
                   <h2 className="text-xl font-bold text-indigo-700 bg-indigo-50 p-3 border-l-4 border-indigo-700 mb-4">第五部分：節氣養生指導</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10 pdf-two-col-grid">
                     <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100">
                       <h4 className="font-bold text-orange-800 mb-2">2月 (雨水)</h4>
                       <p className="text-sm text-slate-700">{aiReport.seasonal_guidance.february}</p>
@@ -769,7 +820,7 @@ function AgentPortal({ clients }: any) {
                           <div className="bg-indigo-600 text-white px-3 py-1 rounded-lg text-xs font-bold w-fit">{prod.line}</div>
                           <h4 className="font-bold text-slate-800">{prod.name}</h4>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pdf-two-col-grid">
                           <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
                             <p className="text-xs font-bold text-indigo-600 mb-1 uppercase tracking-wider">匹配理由</p>
                             <p className="text-sm text-slate-700">{prod.reason}</p>
