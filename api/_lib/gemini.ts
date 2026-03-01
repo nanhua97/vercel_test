@@ -3,7 +3,7 @@ import { setupDevProxyForGemini } from './devProxy.js';
 
 const DEFAULT_MODEL = 'gemini-2.5-pro';
 const DEFAULT_REQUEST_TIMEOUT_MS = 45_000;
-const DEFAULT_MAX_OUTPUT_TOKENS = 10000;
+const DEFAULT_MAX_OUTPUT_TOKENS = 3000;
 setupDevProxyForGemini();
 
 class GeminiTimeoutError extends Error {
