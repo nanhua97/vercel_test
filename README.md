@@ -21,6 +21,7 @@ npm run dev
 - `VITE_GEMINI_API_KEY`（必填）
 - `VITE_GEMINI_MODEL`（選填，預設 `gemini-2.5-flash`）
 - `VITE_GEMINI_MAX_OUTPUT_TOKENS`（選填，預設 `10000`）
+- `VITE_GEMINI_DEBUG`（選填，預設啟用；設為 `false` 可關閉 console 除錯輸出）
 
 ## 建置與預覽
 

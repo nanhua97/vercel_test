@@ -4,6 +4,7 @@ interface ImportMetaEnv {
   readonly VITE_GEMINI_API_KEY?: string;
   readonly VITE_GEMINI_MODEL?: string;
   readonly VITE_GEMINI_MAX_OUTPUT_TOKENS?: string;
+  readonly VITE_GEMINI_DEBUG?: string;
 }
 
 interface ImportMeta {

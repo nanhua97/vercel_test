@@ -249,6 +249,29 @@ function getBrowserApiKey(): string {
   return key;
 }
 
+function shouldLogGeminiDebug(): boolean {
+  const flag = import.meta.env.VITE_GEMINI_DEBUG?.trim().toLowerCase();
+  if (!flag) return true;
+  return flag !== 'false' && flag !== '0' && flag !== 'off';
+}
+
+function logGeminiRawResponse(modelName: string, response: any): void {
+  if (!shouldLogGeminiDebug()) return;
+  const finishReason = response?.candidates?.[0]?.finishReason || 'UNKNOWN';
+  console.groupCollapsed(`[Gemini Debug] Raw response (${modelName})`);
+  console.log('finishReason:', finishReason);
+  console.log('rawText:', response?.text || '');
+  console.log('responseObject:', response);
+  console.groupEnd();
+}
+
+function logGeminiParsedResponse(modelName: string, parsed: any): void {
+  if (!shouldLogGeminiDebug()) return;
+  console.groupCollapsed(`[Gemini Debug] Parsed response (${modelName})`);
+  console.log('parsedJson:', parsed);
+  console.groupEnd();
+}
+
 export async function generateReportFromPrompt(prompt: string, model?: string): Promise<any> {
   const apiKey = getBrowserApiKey();
   const ai = new GoogleGenAI({ apiKey });
@@ -256,9 +279,10 @@ export async function generateReportFromPrompt(prompt: string, model?: string): 
     import.meta.env.VITE_GEMINI_MAX_OUTPUT_TOKENS,
     DEFAULT_MAX_OUTPUT_TOKENS
   );
+  const modelName = model || import.meta.env.VITE_GEMINI_MODEL || DEFAULT_MODEL;
 
   const response = await ai.models.generateContent({
-    model: model || import.meta.env.VITE_GEMINI_MODEL || DEFAULT_MODEL,
+    model: modelName,
     contents: prompt,
     config: {
       responseMimeType: 'application/json',
@@ -266,11 +290,22 @@ export async function generateReportFromPrompt(prompt: string, model?: string): 
       maxOutputTokens,
     },
   });
+  logGeminiRawResponse(modelName, response);
 
   try {
-    return parseJsonText(response.text || '{}');
+    const parsed = parseJsonText(response.text || '{}');
+    logGeminiParsedResponse(modelName, parsed);
+    return parsed;
   } catch (error) {
     const finishReason = response?.candidates?.[0]?.finishReason;
+    if (shouldLogGeminiDebug()) {
+      console.error('[Gemini Debug] Parse failed:', {
+        model: modelName,
+        finishReason,
+        rawText: response?.text || '',
+        error,
+      });
+    }
     if (finishReason === 'MAX_TOKENS') {
       throw new Error('AI 輸出被截斷（超出 token 限制），請重試。');
     }
