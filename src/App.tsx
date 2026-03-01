@@ -270,6 +270,12 @@ function AgentPortal() {
     goal: normalizeText(payload?.goal),
     intro_title: normalizeText(payload?.intro_title),
     intro_paragraphs: normalizeArray(payload?.intro_paragraphs).map((item) => normalizeText(item)).filter(Boolean),
+    integrative_strategy: {
+      western_analysis: normalizeText(payload?.integrative_strategy?.western_analysis),
+      western_strategy: normalizeText(payload?.integrative_strategy?.western_strategy),
+      tcm_analysis: normalizeText(payload?.integrative_strategy?.tcm_analysis),
+      tcm_strategy: normalizeText(payload?.integrative_strategy?.tcm_strategy),
+    },
     red_light_items: normalizeArray(payload?.red_light_items).map((item) => ({
       title: normalizeText(item?.title),
       content: normalizeText(item?.content),
@@ -999,15 +1005,15 @@ function AgentPortal() {
                         <tr>
                           <td className="p-3 font-bold bg-slate-50">西醫精準營養</td>
                           <td className="p-3">
-                            <p className="mb-2"><strong>問題：</strong> {aiReport.integrative_strategy.western_analysis}</p>
-                            <p><strong>對策：</strong> {aiReport.integrative_strategy.western_strategy}</p>
+                            <p className="mb-2"><strong>問題：</strong> {aiReport.integrative_strategy?.western_analysis || '—'}</p>
+                            <p><strong>對策：</strong> {aiReport.integrative_strategy?.western_strategy || '—'}</p>
                           </td>
                         </tr>
                         <tr>
                           <td className="p-3 font-bold bg-slate-50">中醫辨證施治</td>
                           <td className="p-3">
-                            <p className="mb-2"><strong>問題：</strong> {aiReport.integrative_strategy.tcm_analysis}</p>
-                            <p><strong>對策：</strong> {aiReport.integrative_strategy.tcm_strategy}</p>
+                            <p className="mb-2"><strong>問題：</strong> {aiReport.integrative_strategy?.tcm_analysis || '—'}</p>
+                            <p><strong>對策：</strong> {aiReport.integrative_strategy?.tcm_strategy || '—'}</p>
                           </td>
                         </tr>
                       </tbody>
