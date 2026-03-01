@@ -3,43 +3,6 @@ import { GoogleGenAI } from '@google/genai';
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 const DEFAULT_MAX_OUTPUT_TOKENS = 10000;
 
-const DAY_MEAL_SCHEMA = {
-  type: 'object',
-  required: ['內容', '熱量'],
-  additionalProperties: false,
-  properties: {
-    內容: { type: 'string' },
-    熱量: { type: 'string' },
-  },
-} as const;
-
-const DAY_MENU_SCHEMA = {
-  type: 'object',
-  required: ['早餐', '午餐', '晚餐'],
-  additionalProperties: false,
-  properties: {
-    早餐: DAY_MEAL_SCHEMA,
-    午餐: DAY_MEAL_SCHEMA,
-    晚餐: DAY_MEAL_SCHEMA,
-  },
-} as const;
-
-function buildWeekMenuSchema(startDay: number, endDay: number) {
-  const properties: Record<string, any> = {};
-  const required: string[] = [];
-  for (let day = startDay; day <= endDay; day += 1) {
-    const key = `Day ${day}`;
-    properties[key] = DAY_MENU_SCHEMA;
-    required.push(key);
-  }
-  return {
-    type: 'object',
-    additionalProperties: false,
-    required,
-    properties,
-  };
-}
-
 const REPORT_RESPONSE_JSON_SCHEMA = {
   type: 'object',
   required: [
@@ -119,15 +82,8 @@ const REPORT_RESPONSE_JSON_SCHEMA = {
         march: { type: 'string' },
       },
     },
-    two_week_menu: {
-      type: 'object',
-      required: ['Week 1 (啟動期)', 'Week 2 (鞏固期)'],
-      additionalProperties: false,
-      properties: {
-        'Week 1 (啟動期)': buildWeekMenuSchema(1, 7),
-        'Week 2 (鞏固期)': buildWeekMenuSchema(8, 14),
-      },
-    },
+    // Keep this node shallow to avoid Gemini GenerationConfig schema nesting-depth errors.
+    two_week_menu: { type: 'object' },
     product_intro: { type: 'string' },
     product_recommendations: {
       type: 'array',
@@ -317,6 +273,23 @@ function logGeminiParsedResponse(modelName: string, parsed: any): void {
   console.groupEnd();
 }
 
+function isSchemaNestingDepthError(error: unknown): boolean {
+  const message = String((error as any)?.message || '');
+  const status = String((error as any)?.status || '');
+  return /schema/i.test(message) && /nesting depth/i.test(message) && /invalid_argument/i.test(status || message);
+}
+
+function buildGenerationConfig(maxOutputTokens: number, includeSchema: boolean): Record<string, any> {
+  const config: Record<string, any> = {
+    responseMimeType: 'application/json',
+    maxOutputTokens,
+  };
+  if (includeSchema) {
+    config.responseJsonSchema = REPORT_RESPONSE_JSON_SCHEMA;
+  }
+  return config;
+}
+
 export async function generateReportFromPrompt(prompt: string, model?: string): Promise<any> {
   const apiKey = getBrowserApiKey();
   const ai = new GoogleGenAI({ apiKey });
@@ -326,15 +299,29 @@ export async function generateReportFromPrompt(prompt: string, model?: string): 
   );
   const modelName = model || import.meta.env.VITE_GEMINI_MODEL || DEFAULT_MODEL;
 
-  const response = await ai.models.generateContent({
-    model: modelName,
-    contents: prompt,
-    config: {
-      responseMimeType: 'application/json',
-      responseJsonSchema: REPORT_RESPONSE_JSON_SCHEMA,
-      maxOutputTokens,
-    },
-  });
+  let response: any;
+  try {
+    response = await ai.models.generateContent({
+      model: modelName,
+      contents: prompt,
+      config: buildGenerationConfig(maxOutputTokens, true),
+    });
+  } catch (error) {
+    if (!isSchemaNestingDepthError(error)) {
+      throw error;
+    }
+    if (shouldLogGeminiDebug()) {
+      console.warn(
+        '[Gemini Debug] responseJsonSchema exceeded nesting depth; retrying request without schema.',
+        error
+      );
+    }
+    response = await ai.models.generateContent({
+      model: modelName,
+      contents: prompt,
+      config: buildGenerationConfig(maxOutputTokens, false),
+    });
+  }
   logGeminiRawResponse(modelName, response);
 
   try {

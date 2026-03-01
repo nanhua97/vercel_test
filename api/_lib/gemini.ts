@@ -252,6 +252,30 @@ function parseJsonText(raw: string): any {
   throw new Error('Gemini response is not valid JSON.');
 }
 
+function isSchemaNestingDepthError(error: unknown): boolean {
+  const message = String((error as any)?.message || '');
+  const status = String((error as any)?.status || '');
+  return /schema/i.test(message) && /nesting depth/i.test(message) && /invalid_argument/i.test(status || message);
+}
+
+function buildGenerationConfig(
+  maxOutputTokens: number,
+  requestTimeoutMs: number,
+  abortSignal: AbortSignal,
+  includeSchema: boolean
+): Record<string, any> {
+  const config: Record<string, any> = {
+    responseMimeType: 'application/json',
+    maxOutputTokens,
+    httpOptions: { timeout: requestTimeoutMs },
+    abortSignal,
+  };
+  if (includeSchema) {
+    config.responseJsonSchema = REPORT_RESPONSE_JSON_SCHEMA;
+  }
+  return config;
+}
+
 export async function generateReportFromPrompt(prompt: string, model?: string): Promise<any> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -275,17 +299,22 @@ export async function generateReportFromPrompt(prompt: string, model?: string): 
   const ai = new GoogleGenAI({ apiKey });
   let response: any;
   try {
-    response = await ai.models.generateContent({
-      model: model || process.env.GEMINI_MODEL || DEFAULT_MODEL,
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseJsonSchema: REPORT_RESPONSE_JSON_SCHEMA,
-        maxOutputTokens,
-        httpOptions: { timeout: requestTimeoutMs },
-        abortSignal: controller.signal,
-      },
-    });
+    try {
+      response = await ai.models.generateContent({
+        model: model || process.env.GEMINI_MODEL || DEFAULT_MODEL,
+        contents: prompt,
+        config: buildGenerationConfig(maxOutputTokens, requestTimeoutMs, controller.signal, true),
+      });
+    } catch (error) {
+      if (!isSchemaNestingDepthError(error)) {
+        throw error;
+      }
+      response = await ai.models.generateContent({
+        model: model || process.env.GEMINI_MODEL || DEFAULT_MODEL,
+        contents: prompt,
+        config: buildGenerationConfig(maxOutputTokens, requestTimeoutMs, controller.signal, false),
+      });
+    }
   } catch (error) {
     if (controller.signal.aborted) {
       throw new GeminiTimeoutError(requestTimeoutMs);
