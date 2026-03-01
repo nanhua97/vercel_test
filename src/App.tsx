@@ -158,7 +158,6 @@ function AgentPortal({ clients }: any) {
 
         【最終輸出要求】
         請僅回傳一個純粹的 JSON 物件，嚴禁包含任何 Markdown 標記。
-        必須是 RFC 8259 合法 JSON：僅可使用雙引號、不得有註解、不得有尾逗號、不得有多餘前後文字。
         **注意：兩週餐單必須完整包含 Day 1 到 Day 14 的每一天，不可省略。**
         JSON 結構如下：
         {
