@@ -60,7 +60,8 @@ function AgentPortal() {
   const mealLabels = ['早餐', '午餐', '晚餐'] as const;
 
   const parseDayNumber = (key: string): number | null => {
-    const match = key.match(/day\s*(\d{1,2})/i);
+    const cleanedKey = String(key).replace(/["'“”]/g, '').trim();
+    const match = cleanedKey.match(/(?:day|第)\s*(\d{1,2})\s*(?:天)?/i);
     if (!match) return null;
     const day = Number(match[1]);
     if (!Number.isFinite(day) || day <= 0 || day > 31) return null;
@@ -72,18 +73,39 @@ function AgentPortal() {
     return String(value).trim();
   };
 
+  const tryParseJsonLike = (value: string): any | null => {
+    const normalized = normalizeText(value)
+      .replace(/^\uFEFF/, '')
+      .replace(/^```json\s*/i, '')
+      .replace(/^```\s*/i, '')
+      .replace(/```$/i, '')
+      .replace(/[“”]/g, '"')
+      .replace(/[‘’]/g, "'")
+      .trim();
+
+    if (!normalized) return null;
+
+    try {
+      return JSON.parse(normalized);
+    } catch {
+      return null;
+    }
+  };
+
   const extractMealsFromText = (text: string) => {
     const source = normalizeText(text);
     const extracted: Record<string, string> = {};
 
     for (const label of mealLabels) {
       const pattern = new RegExp(
-        `${label}\\s*[:：]\\s*([\\s\\S]*?)(?=(?:早餐|午餐|晚餐)\\s*[:：]|$)`,
+        `["'“”]?${label}["'“”]?\\s*[:：]\\s*([\\s\\S]*?)(?=(?:["'“”]?(?:早餐|午餐|晚餐)["'“”]?\\s*[:：])|$)`,
         'i'
       );
       const match = source.match(pattern);
       if (match?.[1]) {
-        const content = match[1].replace(/^[,，;；\s]+|[,，;；\s]+$/g, '').trim();
+        const content = match[1]
+          .replace(/^[,，;；\s"'}\]]+|[,，;；\s"'{\[]+$/g, '')
+          .trim();
         if (content) {
           extracted[label] = content;
         }
@@ -138,6 +160,11 @@ function AgentPortal() {
     };
 
     if (typeof raw === 'string') {
+      const parsedStringValue = tryParseJsonLike(raw);
+      if (parsedStringValue && typeof parsedStringValue === 'object') {
+        return normalizeDayMeals(parsedStringValue);
+      }
+
       applyExtracted(raw);
       if (mealLabels.every((label) => isMealEmpty(normalized[label]))) {
         normalized.早餐 = normalizeText(raw);
@@ -181,6 +208,13 @@ function AgentPortal() {
   };
 
   const normalizeTwoWeekMenu = (raw: any): Record<string, Record<string, any>> => {
+    if (typeof raw === 'string') {
+      const parsedStringValue = tryParseJsonLike(raw);
+      if (parsedStringValue && typeof parsedStringValue === 'object') {
+        return normalizeTwoWeekMenu(parsedStringValue);
+      }
+    }
+
     const days = new Map<number, Record<string, any>>();
 
     const upsertDay = (dayNumber: number, value: any) => {
