@@ -328,6 +328,9 @@ function getReadableErrorMessage(error: unknown): string {
 
   if (error && typeof error === 'object') {
     const err = error as any;
+    if (err?.code === 'GEMINI_TIMEOUT') {
+      return 'AI 生成超時（45秒）。請重試，或縮減輸入內容後再生成。';
+    }
     const causeCode = err?.cause?.code;
     if (causeCode === 'UND_ERR_CONNECT_TIMEOUT') {
       return 'Unable to reach Gemini API (network timeout). Please check outbound network access and try again.';
@@ -390,6 +393,8 @@ async function startServer() {
     try {
       const prompt = (req.body?.prompt || '').trim();
       const model = req.body?.model || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+      const requestTimeoutMs = Number(process.env.GEMINI_REQUEST_TIMEOUT_MS || 45000);
+      const maxOutputTokens = Number(process.env.GEMINI_MAX_OUTPUT_TOKENS || 3000);
 
       if (!prompt) {
         return res.status(400).json({ error: 'prompt is required.' });
@@ -400,14 +405,30 @@ async function startServer() {
       }
 
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const response = await ai.models.generateContent({
-        model,
-        contents: prompt,
-        config: { responseMimeType: 'application/json' },
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
+
+      let response;
+      try {
+        response = await ai.models.generateContent({
+          model,
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json',
+            maxOutputTokens,
+            httpOptions: { timeout: requestTimeoutMs },
+            abortSignal: controller.signal,
+          },
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       res.json(parseGeminiJson(response.text || '{}'));
     } catch (error) {
+      if ((error as any)?.name === 'AbortError') {
+        (error as any).code = 'GEMINI_TIMEOUT';
+      }
       console.error('AI Generation Error:', error);
       res.status(500).json({ error: getReadableErrorMessage(error) });
     }

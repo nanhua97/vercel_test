@@ -2,7 +2,27 @@ import { GoogleGenAI } from '@google/genai';
 import { setupDevProxyForGemini } from './devProxy.js';
 
 const DEFAULT_MODEL = 'gemini-2.5-flash';
+const DEFAULT_REQUEST_TIMEOUT_MS = 45_000;
+const DEFAULT_MAX_OUTPUT_TOKENS = 3000;
 setupDevProxyForGemini();
+
+class GeminiTimeoutError extends Error {
+  code: string;
+
+  constructor(timeoutMs: number) {
+    super(`Gemini request timed out after ${timeoutMs}ms.`);
+    this.name = 'GeminiTimeoutError';
+    this.code = 'GEMINI_TIMEOUT';
+  }
+}
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return Math.floor(parsed);
+}
 
 function tryParseJson(raw: string): any | null {
   try {
@@ -130,12 +150,41 @@ export async function generateReportFromPrompt(prompt: string, model?: string): 
     throw new Error('Missing GEMINI_API_KEY environment variable.');
   }
 
+  const requestTimeoutMs = parsePositiveInt(
+    process.env.GEMINI_REQUEST_TIMEOUT_MS,
+    DEFAULT_REQUEST_TIMEOUT_MS
+  );
+  const maxOutputTokens = parsePositiveInt(
+    process.env.GEMINI_MAX_OUTPUT_TOKENS,
+    DEFAULT_MAX_OUTPUT_TOKENS
+  );
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, requestTimeoutMs);
+
   const ai = new GoogleGenAI({ apiKey });
-  const response = await ai.models.generateContent({
-    model: model || process.env.GEMINI_MODEL || DEFAULT_MODEL,
-    contents: prompt,
-    config: { responseMimeType: 'application/json' },
-  });
+  let response;
+  try {
+    response = await ai.models.generateContent({
+      model: model || process.env.GEMINI_MODEL || DEFAULT_MODEL,
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        maxOutputTokens,
+        httpOptions: { timeout: requestTimeoutMs },
+        abortSignal: controller.signal,
+      },
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new GeminiTimeoutError(requestTimeoutMs);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   return parseJsonText(response.text || '{}');
 }

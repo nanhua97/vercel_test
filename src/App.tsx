@@ -118,6 +118,8 @@ function AgentPortal({ clients }: any) {
       }
 
       const diagnosisSummary = `首要：${primaryOrgan.name}(${primaryOrgan.score}分) | 次要：${otherOrgans.map(d => `${d.name}(${d.score}分)`).join(', ') || '無'} | 參考體質：${selectedConstitutions.map(c => c.name).join(', ') || '無'}`;
+      const now = new Date();
+      const currentDateText = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`;
 
       const prompt = `
         你現在是一位擁有 30 年經驗的資深中西醫整合醫學專家。請根據以下數據，為客戶撰寫一份深度調理報告。
@@ -127,11 +129,11 @@ function AgentPortal({ clients }: any) {
         - **相關兼證 (次要問題)**：${otherOrgans.map(o => `${o.name} (${o.score}分)`).join(', ') || '無'}
         - **體質背景 (身體土壤)**：${selectedConstitutions.map(c => `${c.name} (${c.score}分)`).join(', ') || '無'}
         - **系統判定策略等級**：${strategyText}
-        - **當前日期**：2026年2月26日
+        - **當前日期**：${currentDateText}
 
         ---
 
-        【你的思考與撰寫步驟 (Chain of Thought)】
+        【你的執行步驟】
         1. **定調核心**：分析首要問題在中醫與西醫營養學上的意義。
         2. **審視關聯**：分析次要問題與體質是如何「推波助瀾」或加重首要問題的。
         3. **制定整合策略**：標本兼治，語氣需與策略等級相符。
@@ -156,6 +158,14 @@ function AgentPortal({ clients }: any) {
 
         【最終輸出要求】
         請僅回傳一個純粹的 JSON 物件，嚴禁包含任何 Markdown 標記。
+        為避免超時，請嚴格精簡輸出：
+        - 全文簡潔，總字數控制在 1600 字內。
+        - intro_paragraphs 僅 1 段，每段不超過 120 字。
+        - red_light_items 固定 2 項；green_light_list 固定 4 項。
+        - diet_rules 固定 4 項；lifestyle_solutions 固定 4 項。
+        - seasonal_guidance 每月不超過 70 字。
+        - two_week_menu 仍需 Day1~Day14 完整，但每餐「內容」不超過 16 字。
+        - product_intro 不超過 60 字；product_recommendations 各項 reason/principle 不超過 40 字。
         **注意：兩週餐單必須完整包含 Day 1 到 Day 14 的每一天，不可省略。**
         JSON 結構如下：
         {

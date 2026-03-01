@@ -22,8 +22,11 @@ export function methodNotAllowed(res: any, allowed: string[]): void {
 export function sendError(res: any, error: unknown): void {
   let message = error instanceof Error ? error.message : 'Unexpected server error';
   const causeCode = (error as any)?.cause?.code;
+  const errorCode = (error as any)?.code;
 
-  if (causeCode === 'UND_ERR_CONNECT_TIMEOUT') {
+  if (errorCode === 'GEMINI_TIMEOUT') {
+    message = 'AI 生成超時（45秒）。請重試，或縮減輸入內容後再生成。';
+  } else if (causeCode === 'UND_ERR_CONNECT_TIMEOUT') {
     message = 'Unable to reach Gemini API (network timeout). Please check outbound network access and try again.';
   } else if (causeCode === 'ENOTFOUND') {
     message = 'Unable to resolve Gemini API host (DNS failure). Please check your network/DNS settings.';
