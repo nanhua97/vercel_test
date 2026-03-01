@@ -1,12 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   ClipboardList, 
-  User, 
   Camera, 
-  Droplets, 
-  Coffee, 
-  Moon, 
-  Sun, 
   CheckCircle, 
   Download,
   Activity,
@@ -15,6 +10,7 @@ import {
   Mail
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { generateReportFromPrompt } from './lib/geminiClient';
 
 // --- Constants ---
 const ORGANS = [
@@ -26,38 +22,21 @@ const CONSTITUTIONS = [
   '平和型', '氣虛型', '陽虛型', '陰虛型', '痰濕型', '濕熱型', '血瘀型', '氣鬱型', '特稟型', '血虛型'
 ];
 
-// --- Types ---
-type Role = 'agent' | 'client';
-
 export default function App() {
-  const [clients, setClients] = useState<any[]>([]);
-
-  useEffect(() => {
-    fetch('/api/clients')
-      .then(res => res.json())
-      .then(data => {
-        setClients(data);
-      });
-  }, []);
-
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
-      <AgentPortal 
-        clients={clients} 
-      />
+      <AgentPortal />
     </div>
   );
 }
 
 // --- CS Agent Portal ---
-function AgentPortal({ clients }: any) {
+function AgentPortal() {
   const [primaryOrgan, setPrimaryOrgan] = useState<{ name: string, score: number } | null>(null);
   const [otherOrgans, setOtherOrgans] = useState<{ name: string, score: number }[]>([]);
   const [selectedConstitutions, setSelectedConstitutions] = useState<{ name: string, score: number }[]>([]);
-  const [logs, setLogs] = useState<any[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
-  const [selectedHistoryClientId, setSelectedHistoryClientId] = useState<number | null>(null);
   const [aiReport, setAiReport] = useState<any | null>(null);
   const [uploadedLogo, setUploadedLogo] = useState<string | null>(null);
 
@@ -78,13 +57,246 @@ function AgentPortal({ clients }: any) {
     return '(良好) ：預防保健';
   };
 
-  useEffect(() => {
-    if (selectedHistoryClientId) {
-      fetch(`/api/logs/${selectedHistoryClientId}`)
-        .then(res => res.json())
-        .then(setLogs);
+  const mealLabels = ['早餐', '午餐', '晚餐'] as const;
+
+  const parseDayNumber = (key: string): number | null => {
+    const match = key.match(/day\s*(\d{1,2})/i);
+    if (!match) return null;
+    const day = Number(match[1]);
+    if (!Number.isFinite(day) || day <= 0 || day > 31) return null;
+    return day;
+  };
+
+  const normalizeText = (value: unknown): string => {
+    if (value === null || value === undefined) return '';
+    return String(value).trim();
+  };
+
+  const extractMealsFromText = (text: string) => {
+    const source = normalizeText(text);
+    const extracted: Record<string, string> = {};
+
+    for (const label of mealLabels) {
+      const pattern = new RegExp(
+        `${label}\\s*[:：]\\s*([\\s\\S]*?)(?=(?:早餐|午餐|晚餐)\\s*[:：]|$)`,
+        'i'
+      );
+      const match = source.match(pattern);
+      if (match?.[1]) {
+        const content = match[1].replace(/^[,，;；\s]+|[,，;；\s]+$/g, '').trim();
+        if (content) {
+          extracted[label] = content;
+        }
+      }
     }
-  }, [selectedHistoryClientId]);
+
+    return extracted;
+  };
+
+  const normalizeMealValue = (value: any): any => {
+    if (value && typeof value === 'object') {
+      const content = normalizeText(value.內容);
+      const calories = normalizeText(value.熱量);
+      if (content || calories) {
+        return {
+          內容: content || '—',
+          熱量: calories || '',
+        };
+      }
+    }
+
+    return normalizeText(value);
+  };
+
+  const isMealEmpty = (value: any): boolean => {
+    if (!value) return true;
+    if (typeof value === 'string') {
+      return value.trim() === '' || value.trim() === '—';
+    }
+    if (typeof value === 'object') {
+      const content = normalizeText(value.內容);
+      const calories = normalizeText(value.熱量);
+      return !content && !calories;
+    }
+    return false;
+  };
+
+  const normalizeDayMeals = (raw: any): Record<string, any> => {
+    const normalized: Record<string, any> = {
+      早餐: '',
+      午餐: '',
+      晚餐: '',
+    };
+
+    const applyExtracted = (source: string) => {
+      const extracted = extractMealsFromText(source);
+      for (const label of mealLabels) {
+        if (extracted[label] && isMealEmpty(normalized[label])) {
+          normalized[label] = extracted[label];
+        }
+      }
+    };
+
+    if (typeof raw === 'string') {
+      applyExtracted(raw);
+      if (mealLabels.every((label) => isMealEmpty(normalized[label]))) {
+        normalized.早餐 = normalizeText(raw);
+      }
+    } else if (raw && typeof raw === 'object') {
+      for (const label of mealLabels) {
+        if (raw[label] !== undefined) {
+          normalized[label] = normalizeMealValue(raw[label]);
+        }
+      }
+
+      for (const [key, value] of Object.entries(raw)) {
+        if ((mealLabels as readonly string[]).includes(key)) {
+          continue;
+        }
+        const valueText = typeof value === 'string' ? value : '';
+        applyExtracted(`${key} ${valueText}`.trim());
+        if (valueText) {
+          applyExtracted(valueText);
+        }
+      }
+    }
+
+    for (const label of mealLabels) {
+      if (isMealEmpty(normalized[label])) {
+        normalized[label] = '—';
+      }
+    }
+
+    return normalized;
+  };
+
+  const mergeDayMeals = (base: Record<string, any>, incoming: Record<string, any>) => {
+    const merged: Record<string, any> = { ...base };
+    for (const label of mealLabels) {
+      if (isMealEmpty(merged[label]) && !isMealEmpty(incoming[label])) {
+        merged[label] = incoming[label];
+      }
+    }
+    return merged;
+  };
+
+  const normalizeTwoWeekMenu = (raw: any): Record<string, Record<string, any>> => {
+    const days = new Map<number, Record<string, any>>();
+
+    const upsertDay = (dayNumber: number, value: any) => {
+      const normalized = normalizeDayMeals(value);
+      const existing = days.get(dayNumber);
+      days.set(dayNumber, existing ? mergeDayMeals(existing, normalized) : normalized);
+    };
+
+    const processEntry = (key: string, value: any) => {
+      const dayNum = parseDayNumber(key);
+      if (dayNum !== null) {
+        upsertDay(dayNum, value);
+      }
+    };
+
+    if (raw && typeof raw === 'object') {
+      for (const [topKey, topValue] of Object.entries(raw)) {
+        const topDay = parseDayNumber(topKey);
+        if (topDay !== null) {
+          upsertDay(topDay, topValue);
+          continue;
+        }
+
+        if (!topValue || typeof topValue !== 'object') {
+          continue;
+        }
+
+        const nestedEntries = Object.entries(topValue);
+        const nestedDayNumbers: number[] = [];
+        const strayFragments: string[] = [];
+
+        for (const [nestedKey, nestedValue] of nestedEntries) {
+          const nestedDay = parseDayNumber(nestedKey);
+          if (nestedDay !== null) {
+            nestedDayNumbers.push(nestedDay);
+            upsertDay(nestedDay, nestedValue);
+          } else {
+            const fragment = `${nestedKey} ${typeof nestedValue === 'string' ? nestedValue : ''}`.trim();
+            if (fragment) {
+              strayFragments.push(fragment);
+            }
+          }
+        }
+
+        if (nestedDayNumbers.length > 0 && strayFragments.length > 0) {
+          const targetDay = Math.min(...nestedDayNumbers);
+          const merged = mergeDayMeals(days.get(targetDay) || normalizeDayMeals({}), normalizeDayMeals(strayFragments.join(' ')));
+          days.set(targetDay, merged);
+        } else if (nestedDayNumbers.length === 0) {
+          processEntry(topKey, topValue);
+        }
+      }
+    }
+
+    const sortedDayNumbers = Array.from(days.keys()).sort((a, b) => a - b);
+    const week1: Record<string, any> = {};
+    const week2: Record<string, any> = {};
+
+    for (const day of sortedDayNumbers) {
+      const label = `Day ${day}`;
+      if (day <= 7) {
+        week1[label] = days.get(day);
+      } else {
+        week2[label] = days.get(day);
+      }
+    }
+
+    const normalizedMenu: Record<string, Record<string, any>> = {};
+    if (Object.keys(week1).length > 0) {
+      normalizedMenu['Week 1 (啟動期)'] = week1;
+    }
+    if (Object.keys(week2).length > 0) {
+      normalizedMenu['Week 2 (鞏固期)'] = week2;
+    }
+
+    if (!Object.keys(normalizedMenu).length) {
+      normalizedMenu['Week 1 (啟動期)'] = { 'Day 1': normalizeDayMeals(raw) };
+    }
+
+    return normalizedMenu;
+  };
+
+  const normalizeArray = (value: any): any[] => (Array.isArray(value) ? value : []);
+
+  const normalizeReportPayload = (payload: any) => ({
+    ...payload,
+    goal: normalizeText(payload?.goal),
+    intro_title: normalizeText(payload?.intro_title),
+    intro_paragraphs: normalizeArray(payload?.intro_paragraphs).map((item) => normalizeText(item)).filter(Boolean),
+    red_light_items: normalizeArray(payload?.red_light_items).map((item) => ({
+      title: normalizeText(item?.title),
+      content: normalizeText(item?.content),
+    })),
+    green_light_list: normalizeArray(payload?.green_light_list).map((item) => normalizeText(item)).filter(Boolean),
+    diet_rules: normalizeArray(payload?.diet_rules).map((item) => ({
+      title: normalizeText(item?.title),
+      content: normalizeText(item?.content),
+    })),
+    lifestyle_solutions: normalizeArray(payload?.lifestyle_solutions).map((item) => ({
+      title: normalizeText(item?.title),
+      content: normalizeText(item?.content),
+    })),
+    seasonal_guidance: {
+      february: normalizeText(payload?.seasonal_guidance?.february),
+      march: normalizeText(payload?.seasonal_guidance?.march),
+    },
+    two_week_menu: normalizeTwoWeekMenu(payload?.two_week_menu),
+    product_intro: normalizeText(payload?.product_intro),
+    product_recommendations: normalizeArray(payload?.product_recommendations).map((item) => ({
+      line: normalizeText(item?.line),
+      name: normalizeText(item?.name),
+      reason: normalizeText(item?.reason),
+      principle: normalizeText(item?.principle),
+    })),
+    conclusion: normalizeText(payload?.conclusion),
+  });
 
   const handleGenerateAIReport = async () => {
     if (!primaryOrgan) {
@@ -261,20 +473,9 @@ function AgentPortal({ clients }: any) {
         }
       `;
 
-      const response = await fetch('/api/reports/ai-generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt }),
-      });
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error || 'AI generation request failed.');
-      }
-
-      const data = await response.json();
+      const data = await generateReportFromPrompt(prompt);
       setAiReport({
-        ...data,
+        ...normalizeReportPayload(data),
         strategyText,
         strategyColor,
         diagnosisSummary

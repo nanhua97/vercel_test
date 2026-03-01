@@ -1,58 +1,41 @@
 # 養生品牌訂單與預約管理系統
 
-這個版本已改為可直接部署到 Vercel：
+目前版本為純前端架構：
 - 前端：Vite + React（輸出到 `dist`）
-- 後端：Vercel Serverless Functions（`api/*`）
-- AI：Gemini 呼叫已移到後端（不再暴露 API Key 到前端）
-- 資料儲存：
-  - 推薦：Vercel KV（可持久化）
-  - 退化：記憶體儲存（可運作但不持久）
-
-## 一键部署到 Vercel
-
-1. 將專案推到 GitHub（或你現有 Git 倉庫）。
-2. 在 Vercel 匯入這個專案（Import Project）。
-3. 在 Vercel 專案設定加入環境變數：
-   - `GEMINI_API_KEY`（必填）
-   - `GEMINI_MODEL`（選填，預設 `gemini-2.5-flash`）
-4. 建議在 Vercel 連接 KV（Storage -> KV），讓系統資料可持久化。
-   - 連接後會自動提供：`KV_REST_API_URL`、`KV_REST_API_TOKEN`
-5. 點擊 Deploy。
+- AI：瀏覽器直接呼叫 Gemini
+- 報告：前端渲染 + 前端匯出 PDF
 
 ## 本地開發
 
-### 方式 A：維持現有本地後端（Express + SQLite）
 ```bash
 npm install
 cp .env.example .env
 npm run dev
 ```
-預設開在 [http://localhost:3000](http://localhost:3000)。
 
-### 方式 B：模擬 Vercel Functions
-```bash
-npm install
-npx vercel dev
-```
+預設開在 [http://localhost:5173](http://localhost:5173)。
 
-## 建置
+## 環境變數
+
+請在 `.env` 設定：
+- `VITE_GEMINI_API_KEY`（必填）
+- `VITE_GEMINI_MODEL`（選填，預設 `gemini-2.5-flash`）
+- `VITE_GEMINI_MAX_OUTPUT_TOKENS`（選填，預設 `10000`）
+
+## 建置與預覽
 
 ```bash
 npm run build
+npm run preview
 ```
 
-## 主要 API
+## 部署到 Vercel
 
-- `GET /api/clients`
-- `GET /api/logs/:userId`
-- `POST /api/logs`
-- `GET /api/reports`
-- `POST /api/reports/save`
-- `POST /api/reports/ai-generate`
-- `POST /api/reports/generate`（回傳可列印 HTML）
+1. 匯入專案到 Vercel。
+2. 在專案環境變數加入 `VITE_GEMINI_API_KEY`（以及需要的選填變數）。
+3. Deploy。
 
 ## 注意事項
 
-- 若未配置 KV，雲端部署仍可運作，但資料在實例重啟/切換後可能遺失。
-- `GEMINI_API_KEY` 只在後端使用；前端已不再注入該金鑰。
-- 若你需要在本地開發走代理，設定 `APP_ENV=dev` 並填入 `HTTPS_PROXY`/`HTTP_PROXY`；後端 Gemini 請求會在 dev 模式強制走代理。
+- 本專案採前端直連 Gemini，`VITE_GEMINI_API_KEY` 會出現在前端資產中，請務必搭配 Google Cloud 限額與金鑰限制策略。
+- 由於不再依賴 Vercel Function 生成報告，AI 生成流程不受 Vercel Function 執行時長限制。

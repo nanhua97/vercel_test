@@ -7,13 +7,13 @@
     "node": "22.x"
   },
   "scripts": {
-    "dev": "tsx server.ts",
+    "dev": "vite",
     "dev:vercel": "npx vercel dev",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "start": "tsx server.ts"
+    "start": "vite preview"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
