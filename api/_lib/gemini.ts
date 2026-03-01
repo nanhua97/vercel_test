@@ -24,6 +24,114 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
   return Math.floor(parsed);
 }
 
+const REPORT_RESPONSE_JSON_SCHEMA = {
+  type: 'object',
+  required: [
+    'goal',
+    'intro_title',
+    'intro_paragraphs',
+    'integrative_strategy',
+    'red_light_items',
+    'green_light_list',
+    'diet_rules',
+    'lifestyle_solutions',
+    'seasonal_guidance',
+    'two_week_menu',
+    'product_intro',
+    'product_recommendations',
+    'conclusion',
+  ],
+  additionalProperties: false,
+  properties: {
+    goal: { type: 'string' },
+    intro_title: { type: 'string' },
+    intro_paragraphs: { type: 'array', items: { type: 'string' }, minItems: 1 },
+    integrative_strategy: {
+      type: 'object',
+      required: ['western_analysis', 'western_strategy', 'tcm_analysis', 'tcm_strategy'],
+      additionalProperties: false,
+      properties: {
+        western_analysis: { type: 'string' },
+        western_strategy: { type: 'string' },
+        tcm_analysis: { type: 'string' },
+        tcm_strategy: { type: 'string' },
+      },
+    },
+    red_light_items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['title', 'content'],
+        additionalProperties: false,
+        properties: {
+          title: { type: 'string' },
+          content: { type: 'string' },
+        },
+      },
+    },
+    green_light_list: { type: 'array', items: { type: 'string' } },
+    diet_rules: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['title', 'content'],
+        additionalProperties: false,
+        properties: {
+          title: { type: 'string' },
+          content: { type: 'string' },
+        },
+      },
+    },
+    lifestyle_solutions: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['title', 'content'],
+        additionalProperties: false,
+        properties: {
+          title: { type: 'string' },
+          content: { type: 'string' },
+        },
+      },
+    },
+    seasonal_guidance: {
+      type: 'object',
+      required: ['february', 'march'],
+      additionalProperties: false,
+      properties: {
+        february: { type: 'string' },
+        march: { type: 'string' },
+      },
+    },
+    two_week_menu: { type: 'object' },
+    product_intro: { type: 'string' },
+    product_recommendations: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['line', 'name', 'reason', 'principle'],
+        additionalProperties: false,
+        properties: {
+          line: { type: 'string' },
+          name: { type: 'string' },
+          reason: { type: 'string' },
+          principle: { type: 'string' },
+        },
+      },
+    },
+    conclusion: { type: 'string' },
+  },
+} as const;
+
+function normalizeJsonCandidate(raw: string): string {
+  return raw
+    .replace(/^\uFEFF/, '')
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/,\s*([}\]])/g, '$1')
+    .trim();
+}
+
 function tryParseJson(raw: string): any | null {
   try {
     return JSON.parse(raw);
@@ -108,7 +216,7 @@ function extractFirstParsableJson(input: string): any | null {
 }
 
 function parseJsonText(raw: string): any {
-  const trimmed = raw.trim();
+  const trimmed = normalizeJsonCandidate(raw);
   if (!trimmed) {
     return {};
   }
@@ -165,13 +273,14 @@ export async function generateReportFromPrompt(prompt: string, model?: string): 
   }, requestTimeoutMs);
 
   const ai = new GoogleGenAI({ apiKey });
-  let response;
+  let response: any;
   try {
     response = await ai.models.generateContent({
       model: model || process.env.GEMINI_MODEL || DEFAULT_MODEL,
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
+        responseJsonSchema: REPORT_RESPONSE_JSON_SCHEMA,
         maxOutputTokens,
         httpOptions: { timeout: requestTimeoutMs },
         abortSignal: controller.signal,
@@ -186,5 +295,15 @@ export async function generateReportFromPrompt(prompt: string, model?: string): 
     clearTimeout(timeoutId);
   }
 
-  return parseJsonText(response.text || '{}');
+  try {
+    return parseJsonText(response.text || '{}');
+  } catch (error) {
+    const finishReason = response?.candidates?.[0]?.finishReason;
+    if (finishReason === 'MAX_TOKENS') {
+      const err = new Error('Gemini output was truncated due to token limit.');
+      (err as any).code = 'GEMINI_OUTPUT_TRUNCATED';
+      throw err;
+    }
+    throw error;
+  }
 }

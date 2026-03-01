@@ -26,6 +26,10 @@ export function sendError(res: any, error: unknown): void {
 
   if (errorCode === 'GEMINI_TIMEOUT') {
     message = 'AI 生成超時（45秒）。請重試，或縮減輸入內容後再生成。';
+  } else if (errorCode === 'GEMINI_OUTPUT_TRUNCATED') {
+    message = 'AI 輸出被截斷（超出 token 限制）。系統已要求精簡輸出，請重試。';
+  } else if (message.includes('Gemini response is not valid JSON')) {
+    message = 'AI 返回了非標準 JSON。請重試一次，若仍失敗請稍後再試。';
   } else if (causeCode === 'UND_ERR_CONNECT_TIMEOUT') {
     message = 'Unable to reach Gemini API (network timeout). Please check outbound network access and try again.';
   } else if (causeCode === 'ENOTFOUND') {

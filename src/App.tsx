@@ -158,14 +158,7 @@ function AgentPortal({ clients }: any) {
 
         【最終輸出要求】
         請僅回傳一個純粹的 JSON 物件，嚴禁包含任何 Markdown 標記。
-        為避免超時，請嚴格精簡輸出：
-        - 全文簡潔，總字數控制在 1600 字內。
-        - intro_paragraphs 僅 1 段，每段不超過 120 字。
-        - red_light_items 固定 2 項；green_light_list 固定 4 項。
-        - diet_rules 固定 4 項；lifestyle_solutions 固定 4 項。
-        - seasonal_guidance 每月不超過 70 字。
-        - two_week_menu 仍需 Day1~Day14 完整，但每餐「內容」不超過 16 字。
-        - product_intro 不超過 60 字；product_recommendations 各項 reason/principle 不超過 40 字。
+        必須是 RFC 8259 合法 JSON：僅可使用雙引號、不得有註解、不得有尾逗號、不得有多餘前後文字。
         **注意：兩週餐單必須完整包含 Day 1 到 Day 14 的每一天，不可省略。**
         JSON 結構如下：
         {
