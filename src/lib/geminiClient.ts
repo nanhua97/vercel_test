@@ -3,6 +3,43 @@ import { GoogleGenAI } from '@google/genai';
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 const DEFAULT_MAX_OUTPUT_TOKENS = 10000;
 
+const DAY_MEAL_SCHEMA = {
+  type: 'object',
+  required: ['內容', '熱量'],
+  additionalProperties: false,
+  properties: {
+    內容: { type: 'string' },
+    熱量: { type: 'string' },
+  },
+} as const;
+
+const DAY_MENU_SCHEMA = {
+  type: 'object',
+  required: ['早餐', '午餐', '晚餐'],
+  additionalProperties: false,
+  properties: {
+    早餐: DAY_MEAL_SCHEMA,
+    午餐: DAY_MEAL_SCHEMA,
+    晚餐: DAY_MEAL_SCHEMA,
+  },
+} as const;
+
+function buildWeekMenuSchema(startDay: number, endDay: number) {
+  const properties: Record<string, any> = {};
+  const required: string[] = [];
+  for (let day = startDay; day <= endDay; day += 1) {
+    const key = `Day ${day}`;
+    properties[key] = DAY_MENU_SCHEMA;
+    required.push(key);
+  }
+  return {
+    type: 'object',
+    additionalProperties: false,
+    required,
+    properties,
+  };
+}
+
 const REPORT_RESPONSE_JSON_SCHEMA = {
   type: 'object',
   required: [
@@ -82,7 +119,15 @@ const REPORT_RESPONSE_JSON_SCHEMA = {
         march: { type: 'string' },
       },
     },
-    two_week_menu: { type: 'object' },
+    two_week_menu: {
+      type: 'object',
+      required: ['Week 1 (啟動期)', 'Week 2 (鞏固期)'],
+      additionalProperties: false,
+      properties: {
+        'Week 1 (啟動期)': buildWeekMenuSchema(1, 7),
+        'Week 2 (鞏固期)': buildWeekMenuSchema(8, 14),
+      },
+    },
     product_intro: { type: 'string' },
     product_recommendations: {
       type: 'array',

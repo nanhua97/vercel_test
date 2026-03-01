@@ -297,6 +297,40 @@ function AgentPortal() {
     return normalizedMenu;
   };
 
+  const isMealValueFilled = (value: any): boolean => {
+    if (!value) return false;
+    if (typeof value === 'string') {
+      const text = value.trim();
+      return text !== '' && text !== '—';
+    }
+    if (typeof value === 'object') {
+      return normalizeText(value.內容) !== '';
+    }
+    return false;
+  };
+
+  const getIncompleteMenuDays = (menu: Record<string, Record<string, any>>): string[] => {
+    const missingDays: string[] = [];
+
+    for (let day = 1; day <= 14; day += 1) {
+      const weekKey = day <= 7 ? 'Week 1 (啟動期)' : 'Week 2 (鞏固期)';
+      const dayLabel = `Day ${day}`;
+      const dayMeals = menu?.[weekKey]?.[dayLabel];
+
+      if (!dayMeals || typeof dayMeals !== 'object') {
+        missingDays.push(dayLabel);
+        continue;
+      }
+
+      const mealMissing = mealLabels.some((label) => !isMealValueFilled(dayMeals[label]));
+      if (mealMissing) {
+        missingDays.push(dayLabel);
+      }
+    }
+
+    return missingDays;
+  };
+
   const normalizeArray = (value: any): any[] => (Array.isArray(value) ? value : []);
 
   const normalizeReportPayload = (payload: any) => ({
@@ -411,6 +445,10 @@ function AgentPortal() {
         【最終輸出要求】
         請僅回傳一個純粹的 JSON 物件，嚴禁包含任何 Markdown 標記。
         **注意：兩週餐單必須完整包含 Day 1 到 Day 14 的每一天，不可省略。**
+        **嚴禁使用 null、空字串、空陣列、空物件作為任何一天或任何一餐的值。**
+        **每一天都必須是物件，且強制包含「早餐 / 午餐 / 晚餐」三個鍵。**
+        **每一餐都必須是「{ "內容": "...", "熱量": "約 XXX kcal" }」格式，內容要具體可執行。**
+        **若資訊不足，請自行補齊合理菜單，不得留空。**
         JSON 結構如下：
         {
             "goal": "...",
@@ -513,9 +551,31 @@ function AgentPortal() {
         }
       `;
 
-      const data = await generateReportFromPrompt(prompt);
+      let data = await generateReportFromPrompt(prompt);
+      let normalizedReport = normalizeReportPayload(data);
+      let incompleteDays = getIncompleteMenuDays(normalizedReport.two_week_menu);
+
+      if (incompleteDays.length > 0) {
+        console.warn('[Gemini Debug] Incomplete meal days detected, retrying once:', incompleteDays);
+        const retryPrompt = `
+${prompt}
+
+【修正指令（必須遵守）】
+你上一版的 two_week_menu 不合格，以下天數缺少可用餐單：${incompleteDays.join(', ')}。
+請重新輸出完整 JSON，並確保 Day 1 到 Day 14 每天都有早餐、午餐、晚餐，且每餐都包含「內容」與「熱量」。
+再次強調：嚴禁 null、空字串、空物件、"—"。
+`;
+        data = await generateReportFromPrompt(retryPrompt);
+        normalizedReport = normalizeReportPayload(data);
+        incompleteDays = getIncompleteMenuDays(normalizedReport.two_week_menu);
+      }
+
+      if (incompleteDays.length > 0) {
+        throw new Error(`兩週餐單仍不完整：${incompleteDays.join(', ')}。請重試。`);
+      }
+
       setAiReport({
-        ...normalizeReportPayload(data),
+        ...normalizedReport,
         strategyText,
         strategyColor,
         diagnosisSummary
