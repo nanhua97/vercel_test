@@ -329,7 +329,7 @@ function getReadableErrorMessage(error: unknown): string {
   if (error && typeof error === 'object') {
     const err = error as any;
     if (err?.code === 'AI_TIMEOUT') {
-      return 'AI 生成超時（45秒）。請重試，或縮減輸入內容後再生成。';
+      return 'AI 生成超時（180秒）。請重試，或縮減輸入內容後再生成。';
     }
     if (err?.code === 'AI_OUTPUT_TRUNCATED') {
       return 'AI 輸出被截斷（超出 token 限制）。系統已要求精簡輸出，請重試。';

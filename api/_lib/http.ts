@@ -25,7 +25,7 @@ export function sendError(res: any, error: unknown): void {
   const errorCode = (error as any)?.code;
 
   if (errorCode === 'AI_TIMEOUT') {
-    message = 'AI 生成超時（45秒）。請重試，或縮減輸入內容後再生成。';
+    message = 'AI 生成超時（180秒）。請重試，或縮減輸入內容後再生成。';
   } else if (errorCode === 'AI_OUTPUT_TRUNCATED') {
     message = 'AI 輸出被截斷（超出 token 限制）。系統已要求精簡輸出，請重試。';
   } else if (message.includes('AI response is not valid JSON')) {

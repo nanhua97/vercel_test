@@ -2,7 +2,7 @@ import { setupDevProxyForAi } from './devProxy.js';
 
 const DEFAULT_MODEL = 'qwen3.5-flash';
 const DEFAULT_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
-const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 180_000;
 const DEFAULT_MAX_OUTPUT_TOKENS = 10000;
 setupDevProxyForAi();
 

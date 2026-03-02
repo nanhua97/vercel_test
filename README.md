@@ -22,7 +22,7 @@ npm run dev
 - `VITE_QWEN_BASE_URL`（選填，預設 `https://dashscope.aliyuncs.com/compatible-mode/v1`）
 - `VITE_QWEN_MODEL`（選填，預設 `qwen3.5-flash`）
 - `VITE_QWEN_MAX_OUTPUT_TOKENS`（選填，預設 `10000`）
-- `VITE_QWEN_REQUEST_TIMEOUT_MS`（選填，預設 `120000`）
+- `VITE_QWEN_REQUEST_TIMEOUT_MS`（選填，預設 `180000`）
 - `VITE_QWEN_DEBUG`（選填，預設啟用；設為 `false` 可關閉 console 除錯輸出）
 
 ## 建置與預覽
