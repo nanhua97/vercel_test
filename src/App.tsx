@@ -10,7 +10,7 @@ import {
   Mail
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { generateReportFromPrompt } from './lib/geminiClient';
+import { generateReportFromPrompt } from './lib/qwenClient';
 
 // --- Constants ---
 const ORGANS = [
@@ -556,7 +556,7 @@ function AgentPortal() {
       let incompleteDays = getIncompleteMenuDays(normalizedReport.two_week_menu);
 
       if (incompleteDays.length > 0) {
-        console.warn('[Gemini Debug] Incomplete meal days detected, retrying once:', incompleteDays);
+        console.warn('[Qwen Debug] Incomplete meal days detected, retrying once:', incompleteDays);
         const retryPrompt = `
 ${prompt}
 
@@ -1019,7 +1019,7 @@ ${prompt}
                   disabled={isGenerating}
                   className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-200"
                 >
-                  {isGenerating ? 'AI 正在思考撰寫中...' : <><Sparkles size={20} /> 呼叫 Gemini 生成報告</>}
+                  {isGenerating ? 'AI 正在思考撰寫中...' : <><Sparkles size={20} /> 呼叫 Qwen 生成報告</>}
                 </button>
                 {aiReport && (
                   <>

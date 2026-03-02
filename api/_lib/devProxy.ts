@@ -29,7 +29,7 @@ function getProxyUrl(): string | null {
   );
 }
 
-export function setupDevProxyForGemini(): void {
+export function setupDevProxyForAi(): void {
   if (proxyApplied || !isDevEnvironment()) {
     return;
   }
@@ -41,5 +41,5 @@ export function setupDevProxyForGemini(): void {
 
   setGlobalDispatcher(new ProxyAgent(proxyUrl));
   proxyApplied = true;
-  console.log(`[dev-proxy] Enabled global fetch proxy for Gemini via ${proxyUrl}`);
+  console.log(`[dev-proxy] Enabled global fetch proxy for AI provider via ${proxyUrl}`);
 }

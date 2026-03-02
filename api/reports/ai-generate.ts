@@ -1,4 +1,4 @@
-import { generateReportFromPrompt } from '../_lib/gemini.js';
+import { generateReportFromPrompt } from '../_lib/qwen.js';
 import { methodNotAllowed, readJsonBody, sendError } from '../_lib/http.js';
 
 export default async function handler(req: any, res: any) {

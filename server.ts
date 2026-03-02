@@ -5,13 +5,13 @@ import Database from 'better-sqlite3';
 import PDFDocument from 'pdfkit';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { GoogleGenAI } from '@google/genai';
-import { setupDevProxyForGemini } from './api/_lib/devProxy.ts';
+import { setupDevProxyForAi } from './api/_lib/devProxy.ts';
+import { generateReportFromPrompt } from './api/_lib/qwen.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-setupDevProxyForGemini();
+setupDevProxyForAi();
 
 const db = new Database('tcm_service.db');
 
@@ -189,7 +189,7 @@ const KNOWLEDGE_BASE: any = {
   }
 };
 
-function parseGeminiJson(raw: string): any {
+function parseAiJson(raw: string): any {
   const tryParseJson = (value: string): any | null => {
     try {
       return JSON.parse(value);
@@ -306,7 +306,7 @@ function parseGeminiJson(raw: string): any {
     return extractedFromRaw;
   }
 
-  throw new Error('Gemini response is not valid JSON.');
+  throw new Error('AI response is not valid JSON.');
 }
 
 function getReadableErrorMessage(error: unknown): string {
@@ -328,18 +328,21 @@ function getReadableErrorMessage(error: unknown): string {
 
   if (error && typeof error === 'object') {
     const err = error as any;
-    if (err?.code === 'GEMINI_TIMEOUT') {
+    if (err?.code === 'AI_TIMEOUT') {
       return 'AI 生成超時（45秒）。請重試，或縮減輸入內容後再生成。';
+    }
+    if (err?.code === 'AI_OUTPUT_TRUNCATED') {
+      return 'AI 輸出被截斷（超出 token 限制）。系統已要求精簡輸出，請重試。';
     }
     const causeCode = err?.cause?.code;
     if (causeCode === 'UND_ERR_CONNECT_TIMEOUT') {
-      return 'Unable to reach Gemini API (network timeout). Please check outbound network access and try again.';
+      return 'Unable to reach DashScope API (network timeout). Please check outbound network access and try again.';
     }
     if (causeCode === 'ENOTFOUND') {
-      return 'Unable to resolve Gemini API host (DNS failure). Please check your network/DNS settings.';
+      return 'Unable to resolve DashScope API host (DNS failure). Please check your network/DNS settings.';
     }
     if (causeCode === 'ECONNREFUSED') {
-      return 'Connection to Gemini API was refused. Please check network proxy or firewall settings.';
+      return 'Connection to DashScope API was refused. Please check network proxy or firewall settings.';
     }
   }
 
@@ -388,47 +391,22 @@ async function startServer() {
     res.json({ success: true });
   });
 
-  // API: Generate structured report JSON via Gemini
+  // API: Generate structured report JSON via Qwen (DashScope compatible API)
   app.post('/api/reports/ai-generate', async (req, res) => {
     try {
       const prompt = (req.body?.prompt || '').trim();
-      const model = req.body?.model || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-      const requestTimeoutMs = Number(process.env.GEMINI_REQUEST_TIMEOUT_MS || 45000);
-      const maxOutputTokens = Number(process.env.GEMINI_MAX_OUTPUT_TOKENS || 3000);
+      const model = req.body?.model || process.env.QWEN_MODEL || 'qwen3.5-flash';
 
       if (!prompt) {
         return res.status(400).json({ error: 'prompt is required.' });
       }
 
-      if (!process.env.GEMINI_API_KEY) {
-        return res.status(500).json({ error: 'Missing GEMINI_API_KEY environment variable.' });
+      if (!process.env.QWEN_API_KEY) {
+        return res.status(500).json({ error: 'Missing QWEN_API_KEY environment variable.' });
       }
 
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
-
-      let response;
-      try {
-        response = await ai.models.generateContent({
-          model,
-          contents: prompt,
-          config: {
-            responseMimeType: 'application/json',
-            maxOutputTokens,
-            httpOptions: { timeout: requestTimeoutMs },
-            abortSignal: controller.signal,
-          },
-        });
-      } finally {
-        clearTimeout(timeoutId);
-      }
-
-      res.json(parseGeminiJson(response.text || '{}'));
+      res.json(await generateReportFromPrompt(prompt, model));
     } catch (error) {
-      if ((error as any)?.name === 'AbortError') {
-        (error as any).code = 'GEMINI_TIMEOUT';
-      }
       console.error('AI Generation Error:', error);
       res.status(500).json({ error: getReadableErrorMessage(error) });
     }

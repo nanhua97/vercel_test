@@ -1,10 +1,12 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_GEMINI_API_KEY?: string;
-  readonly VITE_GEMINI_MODEL?: string;
-  readonly VITE_GEMINI_MAX_OUTPUT_TOKENS?: string;
-  readonly VITE_GEMINI_DEBUG?: string;
+  readonly VITE_QWEN_API_KEY?: string;
+  readonly VITE_QWEN_BASE_URL?: string;
+  readonly VITE_QWEN_MODEL?: string;
+  readonly VITE_QWEN_MAX_OUTPUT_TOKENS?: string;
+  readonly VITE_QWEN_REQUEST_TIMEOUT_MS?: string;
+  readonly VITE_QWEN_DEBUG?: string;
 }
 
 interface ImportMeta {
