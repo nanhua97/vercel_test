@@ -1,6 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 
-const DEFAULT_MODEL = 'gemini-2.5-pro';
+const DEFAULT_MODEL = 'gemini-2.5-flash';
 const DEFAULT_MAX_OUTPUT_TOKENS = 10000;
 
 const REPORT_RESPONSE_JSON_SCHEMA = {
