@@ -392,7 +392,7 @@ async function startServer() {
   app.post('/api/reports/ai-generate', async (req, res) => {
     try {
       const prompt = (req.body?.prompt || '').trim();
-      const model = req.body?.model || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+      const model = req.body?.model || process.env.GEMINI_MODEL || 'gemini-2.5-pro';
       const requestTimeoutMs = Number(process.env.GEMINI_REQUEST_TIMEOUT_MS || 45000);
       const maxOutputTokens = Number(process.env.GEMINI_MAX_OUTPUT_TOKENS || 3000);
 
